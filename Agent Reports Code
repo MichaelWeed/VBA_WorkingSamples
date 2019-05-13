@@ -1,0 +1,424 @@
+The complete code ispasted here but there should be four modules: AgentWrapUp, ANNRC, CSQAgentSummary, and HelperMod.
+Otherwise rename as needed.
+
+Aline of asterisks will separate modules by name
+
+
+************************************************************************************************
+AgentWrapUp
+************************************************************************************************
+Option Explicit
+Sub Cisco_Agent_WrapUp()
+'
+'
+'Use this subroutine to provide weekly agent stats from Cisco Finesse
+'*This creates a final product for manager and director review
+
+
+'Turn off screen updates and auto calculation to save time
+Application.ScreenUpdating = False
+Application.Calculation = xlCalculationManual
+
+
+'Create variables
+Dim lastRow As String
+
+
+'Call the wrap-up code clean-up.
+Call HelperMod.wrapUpCleanUp
+
+
+'Sort by Agent ID
+With ActiveWorkbook.ActiveSheet
+    Range("A1").CurrentRegion.Sort key1:=Range("A1"), Order1:=xlAscending, _
+    Header:=xlYes, OrderCustom:=1, DataOption1:=xlSortNormal
+End With
+
+
+'Chop out the extra bits (data columns we do not need)
+'- works backwards to reduce errors
+Columns("I:L").Delete
+Columns("E:G").Delete
+Columns("B:C").Delete
+
+
+'Add a CountA and CountBlank column to the end, followed by their formulas
+'- measures missing wrap-up categories by agent
+Range("E1").FormulaR1C1 = "CountA"
+Range("F1").FormulaR1C1 = "CountBlank"
+Range("E2").FormulaR1C1 = "=COUNTA(RC[-1])"
+Range("F2").FormulaR1C1 = "=COUNTBLANK(RC[-2])"
+
+
+'Declare the last row variable to find the final row; copy formulas down in Columns E and F
+lastRow = Range("A" & Rows.Count).End(xlUp).Row
+Range("E2:F2").AutoFill Destination:=Range("E2:F" & lastRow)
+
+
+'Select the range to be used in the subtotals
+Call HelperMod.selectDynamicRange
+
+
+'Subtotal Agent-missed counts
+'"GroupBy" is used to choose column dimension and the TotalList array is which fields to sum
+Selection.Subtotal GroupBy:=1, Function:=xlSum, TotalList:=Array(5, 6), _
+    Replace:=True, PageBreaks:=False, SummaryBelowData:=True
+ActiveSheet.Outline.ShowLevels RowLevels:=2
+
+
+'Reset lastRow since we added subtotals
+lastRow = Range("E" & Rows.Count).End(xlUp).Row
+
+
+'Add final row, copy formulas down
+Range("G1").FormulaR1C1 = "WuC %"
+Range("G2").FormulaR1C1 = "=RC[-1]/SUM(RC[-1]:RC[-2])"
+Range("G2").AutoFill Destination:=Range("G2:G" & lastRow)
+
+
+'Final Formatting
+Columns("G").NumberFormat = "0.0%"
+Cells.Columns.AutoFit
+Range("G1").Select
+
+
+'Rename sheet
+ActiveWorkbook.ActiveSheet.Name = "Wrap-up Reasons"
+
+
+'Turn screen updating back on to see the results
+Application.ScreenUpdating = True
+Application.Calculation = xlCalculationAutomatic
+
+End Sub
+
+************************************************************************************************
+ANNRC
+************************************************************************************************
+Option Explicit
+Sub agentNotReadyReasonCode()
+'
+'
+'Run |Agent Not Reason Reason Code Report|
+'Use this sub to prepare the report
+
+
+'Speed up the sub
+Application.ScreenUpdating = False
+Application.Calculation = xlCalculationManual
+
+
+'Create variables
+Dim lastRow As String
+Dim dataCols As Range
+
+
+'Delete rows with blank data
+Call HelperMod.deleteRowsWithEmptyColumn
+
+
+'Set the column headers for Col B and C
+Range("B1").Value = "TotNonWorkTime"
+Range("C1").Value = "%"
+
+
+'Set the formulas for Col B and C
+Range("B2").FormulaR1C1 = "=SUM(RC[6]:RC[9])"
+Range("C2").FormulaR1C1 = "=1-(RC[-1]/RC[4])"
+
+
+'Declare lastRow variable
+lastRow = Range("A" & Rows.Count).End(xlUp).Row
+
+
+'Copy formulas down
+Range("B2:C2").AutoFill Destination:=Range("B2:C" & lastRow)
+
+
+'Declare dataCol variable, which is the range that holds our processed agent data
+Set dataCols = ActiveSheet.Range("B1:C" & lastRow)
+
+
+'Let us add some color and alignment
+dataCols.Interior.Color = 65535
+dataCols.HorizontalAlignment = xlCenter
+
+
+'Format Col C as a percentage, and set the worksheet styles
+Columns("C").NumberFormat = "0.0%"
+Call HelperMod.setStyles
+
+
+'Excel likes to play dumb, so let's expand this column even though we set the styles already
+'(since Excel will ALWAYS squish the column more than it should for an autofit)
+Columns("C").ColumnWidth = 8#
+
+'Rename activesheet
+ActiveWorkbook.ActiveSheet.Name = "Not Ready Reason Codes"
+
+
+'Turn the screen updating and auto calculations back on
+Application.ScreenUpdating = False
+Application.Calculation = xlCalculationAutomatic
+
+
+End Sub
+
+************************************************************************************************
+CSQAgentSummary
+************************************************************************************************
+Option Explicit
+
+Sub Agent_CSQReport()
+'
+'
+'Run |CSQ Agent Summary Report|
+'Use this sub to obtain the monthly agent stats
+
+
+'Turn off screen updating to save time
+Application.ScreenUpdating = False
+Application.Calculation = xlCalculationManual
+
+
+'Declare variables
+Dim ws As Worksheet
+Dim lastRow As Long
+Dim lastColumn As Long
+Dim startCell As Range
+
+
+'Set some variables
+Set ws = ActiveWorkbook.ActiveSheet
+Set startCell = Range("A1")
+
+
+'Unmerge cells and delete extra columns
+Cells.UnMerge
+Columns("A:B").Delete
+Columns("B").Delete
+
+
+'Add column headers to empty column heads
+Range("D1").FormulaR1C1 = "=RC[-1]&"" ""&R[1]C"
+Range("F1").FormulaR1C1 = "=RC[-1]&"" ""&R[1]C"
+Range("J1").FormulaR1C1 = "=RC[-1]&"" ""&R[1]C"
+
+
+'Copy formulas and paste as value for the first row
+Rows(1).Copy
+Rows(1).PasteSpecial Paste:=xlPasteValues
+Rows(2).Delete
+
+
+'Activate FilterMode and sort ColA AToZ
+If ActiveSheet.AutoFilterMode = False Then
+    ActiveSheet.Range("A1").AutoFilter
+End If
+
+With ActiveWorkbook.ActiveSheet
+    Range("A1").CurrentRegion.Sort key1:=Range("A1"), Order1:=xlAscending, _
+        Header:=xlYes, OrderCustom:=1, DataOption1:=xlSortNormal
+End With
+
+
+'Delete unnecessary filler
+Columns("C").Delete
+Columns("D").Delete
+Columns("E:G").Delete
+
+
+'Shift RNA Column to be next to Calls Handle Column
+Columns("F").Cut
+Columns("C").Insert Shift:=xlToRight
+
+
+'Copy unique to the right, add the extra headers
+Columns("A").AdvancedFilter Action:=xlFilterCopy, CopyToRange:=Range("I1"), Unique:=True
+Range("J1").Value = "Total Handle"
+Range("K1").Value = "Total, Converted"
+Range("L1").Value = "CPH"
+Range("M1").Value = "RNA"
+
+
+'Add Formulas
+Range("J2").FormulaR1C1 = "=SUMIF(C[-9],RC[-1],C[-6]:C[-4])"
+Range("K2").FormulaR1C1 = "=RC[-1]*24"
+Range("L2").FormulaR1C1 = "=SUMIF(C[-11],RC[-3],C[-10])/RC[-1]"
+Range("M2").FormulaR1C1 = "=SUMIF(C[-12],RC[-4],C[-10])/SUMIF(C[-12],RC[-4],C[-11]:C[-10])"
+
+
+'Fill down the
+lastRow = Range("I" & Rows.Count).End(xlUp).Row
+Range("J2").AutoFill Destination:=Range("J2:J" & lastRow)
+Range("K2").AutoFill Destination:=Range("K2:K" & lastRow)
+Range("L2").AutoFill Destination:=Range("L2:L" & lastRow)
+Range("M2").AutoFill Destination:=Range("M2:M" & lastRow)
+
+
+'Change the number formatting
+Columns("J:K").NumberFormat = "[h]:mm:ss;@"
+Columns("L").NumberFormat = "0.0"
+Columns("M").NumberFormat = "0.0 %"
+Range("I2:M" & lastRow).Interior.Color = 16773057
+
+
+'Clean up the worksheet formatting, hide old columns
+Call HelperMod.setStyles
+
+Columns("A:H").EntireColumn.Hidden = True
+Columns("L:M").ColumnWidth = 7.86
+
+
+'Rename activesheet
+ActiveWorkbook.ActiveSheet.Name = "CSQ Agent Summary"
+
+
+'Turn on application updates
+Application.ScreenUpdating = True
+Application.Calculation = xlCalculationAutomatic
+
+
+End Sub
+************************************************************************************************
+HelperMod
+************************************************************************************************
+Option Explicit
+Private Sub deleteRowsWithEmptyColumn()
+'
+'
+'Use this subroutine to delete entire rows that contain blanks in specific columns
+
+'State and declare variable
+Dim i As String
+i = InputBox("Enter a Columm Letter -" & vbNewLine & vbNewLine & "This column will be checked for blanks, and the blank rows in each column will be deleted.", "Row Deleter")
+
+
+'Ignore errors and continue to next row
+On Error Resume Next
+
+
+'The column set in the inputbox will be checked and if blank, will delete the entire row.  i has been commented out above
+Columns(i).SpecialCells(xlBlanks).EntireRow.Delete
+
+
+End Sub
+
+Private Sub selDynRng()
+'
+'
+'Alternative to the selectDynamicRange subroutine.  Code will stop at first blank row encountered after Row1
+
+ActiveSheet.Range("A1").CurrentRegion.Select
+
+End Sub
+
+Private Sub selectDynamicRange()
+'
+'
+'Select the dynamic range of a table.  Must be a contiguous range, starting in Cell A1
+
+
+'Define variables
+Dim ws As Worksheet
+Dim lastRow As Long
+Dim lastColumn As Long
+Dim startCell As Range
+
+
+'Set variables
+Set ws = ActiveSheet
+Set startCell = Range("A1")
+
+lastRow = ws.Cells(ws.Rows.Count, startCell.Column).End(xlUp).Row
+lastColumn = ws.Cells(startCell.Row, ws.Columns.Count).End(xlToLeft).Column
+
+
+'Select the dynamic range
+ws.Range(startCell, ws.Cells(lastRow, lastColumn)).Select
+
+
+End Sub
+Private Sub setStyles()
+
+'Unify styles
+Cells.WrapText = False
+Cells.Borders.LineStyle = xlNone
+With Cells.Font
+    .Name = "Calibri"
+    .Size = 11
+End With
+Cells.Rows.AutoFit
+Cells.Columns.AutoFit
+
+End Sub
+
+
+Private Sub contactReasonCiscoPhone()
+'
+'
+'Use this subroutine to prepare the weekly Cisco contact reasons report
+
+
+'Turn off screen updating to save time
+Application.ScreenUpdating = False
+
+
+'Use the master subroutine to prepare the workbook
+Call wrapUpCleanUp
+
+
+'Delete the unecessary columns
+Columns("I:L").Delete
+Columns("E:G").Delete
+Columns("B:C").Delete
+
+
+'Sort the workbook by wrap-up codes
+With ThisWorkbook.Sheets("sheet1")
+    Range("D1").CurrentRegion.Sort key1:=Range("D1"), Order1:=xlAscending, _
+    Header:=xlYes, OrderCustom:=1, DataOption1:=xlSortNormal
+End With
+
+
+'Call in the heavies!  Select the entire range of cells
+Call selectDynamicRange
+
+
+'The coup de grace, subtotal the current selection of cells
+Selection.Subtotal GroupBy:=4, Function:=xlCount, TotalList:=Array(4), _
+    Replace:=True, PageBreaks:=False, SummaryBelowData:=True
+ActiveSheet.Outline.ShowLevels RowLevels:=2
+
+Columns("D").SpecialCells(xlCellTypeVisible).Copy
+
+
+End Sub
+
+Private Sub wrapUpCleanUp()
+'
+'
+'This subroutine will take a standard wrap-up code report and chop it down to to a cleaner state
+'*Take the output into another form to prepare it for final review
+
+
+'Unify cell styles, Delete columns with empty rows
+Call setStyles
+Call deleteRowsWithEmptyColumn
+
+
+'Delete column A
+Columns("A").Delete
+
+
+'Filter and sort AtoZ in the new Column A
+Range("A1").AutoFilter
+With ActiveWorkbook.ActiveSheet
+    Range("A1").CurrentRegion.Sort key1:=Range("A1"), Order1:=xlAscending, _
+    Header:=xlYes, OrderCustom:=1, DataOption1:=xlSortNormal
+End With
+
+
+End Sub
+
+
